@@ -1,0 +1,1391 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>自律神器 - VA 段码屏网页模拟器</title>
+  <style>
+    * { box-sizing: border-box; margin:0; padding:0; }
+    body {
+      background:#000;
+      display:flex;
+      justify-content:center;
+      padding-top:30px;
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;
+    }
+
+    .root {
+      width:600px;
+      padding:18px;
+      background:#0b1016;
+      border-radius:18px;
+      box-shadow:0 0 35px rgba(0,0,0,0.85);
+    }
+
+    .bezel {
+      background:#cfd2da;
+      border-radius:12px;
+      padding:0;
+    }
+    .bezel-inner {
+      background:#1a2028;
+      padding:6px;
+      border-radius:10px;
+    }
+
+    .display {
+      position:relative;
+      background: radial-gradient(circle at 50% 0%, #163c6b 0%, #030814 55%, #02040a 100%);
+      border-radius:8px;
+      padding:10px 16px 20px;
+      box-shadow:
+        inset 0 0 28px rgba(0,0,0,0.9),
+        0 0 16px rgba(0,0,0,0.8);
+      color:#e8fcff;
+      overflow:hidden;
+    }
+
+    .display-top {
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      margin-bottom:4px;
+    }
+    .top-left {
+      display:flex;
+      align-items:center;
+      gap:6px;
+      color:#fff;
+    }
+    .top-text {
+      font-size:12px;
+      color:#9ec8ff;
+    }
+    .top-right {
+      display:flex;
+      gap:6px;
+    }
+    .top-icon {
+      font-size:14px;
+      color:#42556e;
+    }
+    .top-icon.active {
+      color:#e4fdff;
+      text-shadow:0 0 6px rgba(186,240,255,0.9);
+    }
+
+    .blink {
+      animation: blink 0.8s steps(1,start) infinite;
+    }
+    @keyframes blink {
+      0%,49%   { opacity:1; }
+      50%,100% { opacity:0.15; }
+    }
+
+    .dhm-label {
+      position:absolute;
+      font-size:16px;
+      color:#7fc9ff;
+      font-family:"Consolas","Courier New",monospace;
+      text-shadow:0 0 8px rgba(130,205,255,0.7);
+      pointer-events:none;
+    }
+    #lblD { left:200px; top:34px; }
+    #lblH { left:300px; top:34px; }
+    #lblM { left:400px; top:34px; }
+
+    .time-main {
+      display:flex;
+      justify-content:center;
+      align-items:flex-end;
+      gap:6px;
+      margin-bottom:6px;
+      font-family:"Consolas","Courier New",monospace;
+    }
+    .digit {
+      display:inline-block;
+      width:32px;
+      text-align:center;
+      font-size:40px;
+      font-weight:bold;
+      color:#e8fcff;
+      text-shadow:
+        0 0 10px rgba(203,247,255,0.9),
+        0 0 18px rgba(103,199,255,0.8);
+    }
+    .colon {
+      width:16px;
+      text-align:center;
+      font-size:32px;
+      color:#7fd1ff;
+      text-shadow:0 0 6px rgba(130,205,255,0.7);
+    }
+    .sec-inline {
+      display:inline-block;
+      width:48px;
+      text-align:left;
+      font-size:20px;
+      padding-bottom:4px;
+      margin-left:4px;
+      color:#bffaff;
+      text-shadow:0 0 6px rgba(150,220,255,0.8);
+    }
+
+    .cursor-row {
+      position:absolute;
+      left:0;
+      right:0;
+      height:-24px;
+      top:82px;
+      pointer-events:none;
+    }
+    .cursor-cell {
+      position:absolute;
+      width:32px;
+      font-size:46px;
+      text-align:center;
+      color:#b6f1ff;
+      text-shadow:0 0 4px rgba(150,220,255,0.8);
+    }
+    #cur0 { left:95px;  bottom:0px; }
+    #cur1 { left:135px; bottom:0px; }
+    #cur2 { left:170px; bottom:0px; }
+    #cur3 { left:230px; bottom:0px; }
+    #cur4 { left:270px; bottom:0px; }
+    #cur5 { left:330px; bottom:0px; }
+    #cur6 { left:367px; bottom:0px; }
+
+    .progress-wrap {
+      margin-top:38px;
+      display:flex;
+      justify-content:center;
+    }
+    .progress-bar {
+      width:360px;
+      height:26px;
+      background:#030814aa;
+      border-radius:8px;
+      padding:4px 6px;
+      display:flex;
+      justify-content:space-between;
+      box-shadow:inset 0 0 8px rgba(0,0,0,0.8);
+    }
+    .progress-cell {
+      flex:1;
+      margin:0 1px;
+      border-radius:3px;
+      border:1px solid #375066;
+      background:#111722;
+    }
+    .progress-cell.filled {
+      background:linear-gradient(#e9fdff,#bff3ff);
+      border-color:#6fc4ff;
+      box-shadow:0 0 8px #bff3ff;
+    }
+
+    .info-line {
+      font-size:12px;
+      color:#7fd1ff;
+      text-align:center;
+      margin-top:6px;
+      height:16px;
+    }
+
+    .base {
+      margin-top:12px;
+      background:#f6f7f9;
+      padding:16px 0 12px;
+      border-radius:12px;
+      box-shadow:0 -2px 3px rgba(255,255,255,0.7),
+                 0 3px 8px rgba(0,0,0,0.2);
+    }
+    .btn-row {
+      display:flex;
+      justify-content:center;
+      gap:22px;
+      margin-bottom:8px;
+    }
+    .round-btn {
+      width:60px;
+      height:60px;
+      position:relative;
+      cursor:pointer;
+    }
+    .round-btn-inner {
+      position:absolute;
+      inset:4px 4px 6px 4px;
+      background:linear-gradient(#fff,#f0f3f8);
+      border-radius:50%;
+      border:2px solid #e1e3eb;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:20px;
+    }
+    .round-btn:active .round-btn-inner {
+      transform:translateY(2px);
+    }
+
+    .lid-row {
+      text-align:center;
+      margin-top:4px;
+      margin-bottom:6px;
+    }
+    .lid-row button {
+      padding:4px 10px;
+      font-size:12px;
+      border-radius:8px;
+      border:1px solid #d0d3dd;
+      background:#ffffff;
+      cursor:pointer;
+    }
+
+    .combo-row {
+      display:flex;
+      justify-content:center;
+      gap:10px;
+      margin-top:4px;
+    }
+    .combo-row button {
+      padding:4px 8px;
+      font-size:11px;
+      border-radius:8px;
+      border:1px solid #d0d3dd;
+      background:#ffffff;
+      cursor:pointer;
+      white-space:nowrap;
+    }
+
+    .screen-off {
+      background:#000 !important;
+      box-shadow:none !important;
+      color:#000 !important;
+    }
+  </style>
+</head>
+
+<body>
+<div class="root">
+
+  <div class="bezel">
+    <div class="bezel-inner">
+      <div id="display" class="display">
+
+        <div class="display-top">
+          <div class="top-left">
+            <div id="icon-lock">🔓</div>
+            <div>🔋</div>
+            <div id="top-text" class="top-text">堡垒模式 READY</div>
+          </div>
+          <div class="top-right">
+            <div id="ic-gear" class="top-icon">⚙</div>
+            <div id="ic-smile" class="top-icon">🙂</div>
+            <div id="ic-inf" class="top-icon">∞</div>
+            <div id="ic-key" class="top-icon">🔑</div>
+            <div id="ic-shield" class="top-icon">🛡</div>
+          </div>
+        </div>
+
+        <div id="lblD" class="dhm-label">D</div>
+        <div id="lblH" class="dhm-label">H</div>
+        <div id="lblM" class="dhm-label">M</div>
+
+        <div class="time-main">
+          <span id="d0" class="digit">0</span>
+          <span id="d1" class="digit">0</span>
+          <span id="d2" class="digit">0</span>
+
+          <span class="colon">:</span>
+
+          <span id="h0" class="digit">0</span>
+          <span id="h1" class="digit">0</span>
+
+          <span class="colon">:</span>
+
+          <span id="m0" class="digit">0</span>
+          <span id="m1" class="digit">0</span>
+
+          <span id="sec-small" class="sec-inline"></span>
+        </div>
+
+        <div class="cursor-row">
+          <div class="cursor-cell" id="cur0"></div>
+          <div class="cursor-cell" id="cur1"></div>
+          <div class="cursor-cell" id="cur2"></div>
+          <div class="cursor-cell" id="cur3"></div>
+          <div class="cursor-cell" id="cur4"></div>
+          <div class="cursor-cell" id="cur5"></div>
+          <div class="cursor-cell" id="cur6"></div>
+        </div>
+
+        <div class="progress-wrap">
+          <div id="progress-bar" class="progress-bar"></div>
+        </div>
+
+        <div id="info-line" class="info-line">SET 设置时间，LOCK 开始锁定</div>
+
+      </div>
+    </div>
+  </div>
+
+  <div class="base">
+    <div class="btn-row">
+      <div class="round-btn" id="btn-down"><div class="round-btn-inner">▽</div></div>
+      <div class="round-btn" id="btn-up"><div class="round-btn-inner">△</div></div>
+      <div class="round-btn" id="btn-lock"><div class="round-btn-inner">🔒</div></div>
+      <div class="round-btn" id="btn-set"><div class="round-btn-inner">⚙</div></div>
+      <div class="round-btn" id="btn-back"><div class="round-btn-inner">⟵</div></div>
+    </div>
+
+    <div class="lid-row">
+      <button id="btn-lid">盖子：已合上</button>
+    </div>
+
+    <div class="combo-row">
+      <button id="btn-sim-child">模拟 儿童锁组合（Back+Lock 5s）</button>
+      <button id="btn-sim-reset">模拟 重置组合（Set+Lock 20s）</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const Mode = { FORTRESS:0, NORMAL:1, PASSWORD:2, INFINITE:3 };
+  const State = {
+    IDLE:0, SET_TIME:1, PRELOCK:2,
+    LOCKED_TIMED:3, LOCKED_PASSWORD:4, LOCKED_INFINITE:5,
+    PW_INPUT:6, INFINITE_DELAY:7, INFINITE_PENDING:8,
+    EXTEND_SET:9, PW_MASTER_VERIFY:10, PW_CHANGE:11,
+    MEM_RECALL:12
+  };
+
+  const ARM_COUNTDOWN = 5;
+  const EXIT_TIMEOUT = 10;
+  const INACTIVITY_SEC = 20;
+  const MAX_DAYS = 400;
+  const INFINITE_DELAY_SEC = 3*60;
+  const INFINITE_PENDING_SEC = 5*60;
+  const MIN_LOCK_FOR_CHECKIN = 30*60;
+  const MIN_INTERVAL_BETWEEN_CHECKIN = 18*3600;
+  const MAX_INTERVAL_TO_KEEP_PLAN = 72*3600;
+  const PW_IDLE_TIMEOUT = 10;
+  const MASTER_PW = [6,6,6,6,6,6,6];
+
+  const DOUBLE_TAP_MS = 350;
+  let lastLockTapTime = 0;
+
+  let unlockPwd = [0,0,0,0,0,0,0];
+
+  const fortressPw = [
+    [1,1,1,1,1,1,1],
+    [2,2,2,2,2,2,2],
+    [3,3,3,3,3,3,3],
+    [4,4,4,4,4,4,4],
+    [5,5,5,5,5,5,5],
+    [6,6,6,6,6,6,6]
+  ];
+  let fortressUsed = [false,false,false,false,false,false];
+
+  let mode = Mode.FORTRESS;
+  let state = State.IDLE;
+  let locked = false;
+  let screenOff = false;
+  let childLock = false;
+
+  let lidClosed = true;
+  let latchRetracted = true;
+
+  let setDays=0,setHours=0,setMinutes=0;
+  let cursorIdx = 0;
+
+  let prelockStart = null;
+  let lockEndTime = null;
+  let lockDurationSec = null;
+
+  let infiniteStartTime = null;
+  let infiniteDelayEnd = null;
+  let infinitePendingEnd = null;
+
+  let extendBaseSec = 0;
+
+  let pwDigits = [0,0,0,0,0,0,0];
+  let lastActivity = Date.now()/1000;
+  let lastInput    = Date.now()/1000;
+
+  let progressCount = 0;
+  let lastCheckinTime = null;
+
+  let historyTimes = [];
+  let memIndex = 0;
+
+  const buttons = {
+    set:  { isDown:false, downTime:0 },
+    back: { isDown:false, downTime:0 },
+    lock: { isDown:false, downTime:0 }
+  };
+  let comboChildHandled = false;
+  let comboResetHandled = false;
+  let back10Handled = false;
+
+  let setLongTimer = null;
+  let setLongUsed = false;
+
+  function dhmToSec(d,h,m){ return d*86400 + h*3600 + m*60; }
+  function secToDHMS(sec){
+    if(sec<0) sec=0;
+    let d=Math.floor(sec/86400); sec%=86400;
+    let h=Math.floor(sec/3600);  sec%=3600;
+    let m=Math.floor(sec/60);
+    let s=sec%60;
+    return {d,h,m,s};
+  }
+  function setSecondsClamped(total){
+    if(total<0) total=0;
+    const maxTotal = MAX_DAYS*86400 + 23*3600 + 59*60;
+    if(total>maxTotal) total=maxTotal;
+    let {d,h,m} = secToDHMS(total);
+    setDays=d; setHours=h; setMinutes=m;
+  }
+  function applyCursorStep(dir){
+    let total = dhmToSec(setDays,setHours,setMinutes);
+    let step=0;
+    switch(cursorIdx){
+      case 0: step = 100*86400; break;
+      case 1: step = 10*86400;  break;
+      case 2: step = 1*86400;   break;
+      case 3: step = 10*3600;   break;
+      case 4: step = 1*3600;    break;
+      case 5: step = 10*60;     break;
+      case 6: step = 1*60;      break;
+    }
+    total += dir*step;
+    setSecondsClamped(total);
+  }
+
+  function bumpInput(){ lastInput = Date.now()/1000; }
+
+  function bumpActivity(){
+    const now = Date.now()/1000;
+    if(screenOff){
+      screenOff=false;
+      lastActivity = now;
+      updateDisplay();
+      return false;
+    }
+    lastActivity = now;
+    return true;
+  }
+  function modeName(){
+    switch(mode){
+      case Mode.FORTRESS: return "堡垒模式";
+      case Mode.NORMAL:   return "普通模式";
+      case Mode.PASSWORD: return "密码锁模式";
+      case Mode.INFINITE: return "无限模式";
+    }
+    return "";
+  }
+  function arrEqual(a,b){
+    if(a.length!==b.length) return false;
+    for(let i=0;i<a.length;i++) if(a[i]!==b[i]) return false;
+    return true;
+  }
+
+  function addHistory(sec){
+    if(sec<=0) return;
+    const idx = historyTimes.indexOf(sec);
+    if(idx>=0) historyTimes.splice(idx,1);
+    historyTimes.unshift(sec);
+    if(historyTimes.length>5) historyTimes.pop();
+  }
+
+  function handle21OnAutoUnlock(){
+    if(mode!==Mode.FORTRESS) return;
+    if(lockDurationSec==null || lockDurationSec<MIN_LOCK_FOR_CHECKIN) return;
+
+    const now = Date.now()/1000;
+    if(lastCheckinTime!=null){
+      const gap = now-lastCheckinTime;
+      if(gap<MIN_INTERVAL_BETWEEN_CHECKIN) return;
+      if(gap>MAX_INTERVAL_TO_KEEP_PLAN && progressCount>0){
+        progressCount=0;
+      }
+    }
+    if(progressCount===21) progressCount=0;
+    progressCount = Math.min(21,progressCount+1);
+    lastCheckinTime = now;
+    if(progressCount===21) flash21Reward();
+  }
+  function flash21Reward(){
+    const display = document.getElementById("display");
+    let n=0;
+    const id = setInterval(()=>{
+      n++;
+      display.style.background = (n%2===1) ? "#f4f7ff" : "";
+      if(n>=6){
+        clearInterval(id);
+        display.style.background="";
+        updateDisplay();
+      }
+    },150);
+  }
+
+  const progressBar = document.getElementById("progress-bar");
+  const progressCells = [];
+  for(let i=0;i<21;i++){
+    const cell=document.createElement("div");
+    cell.className="progress-cell";
+    progressBar.appendChild(cell);
+    progressCells.push(cell);
+  }
+  function updateProgressBar(){
+    for(let i=0;i<21;i++){
+      if(i<progressCount) progressCells[i].classList.add("filled");
+      else progressCells[i].classList.remove("filled");
+    }
+  }
+
+  const d0 = document.getElementById("d0");
+  const d1 = document.getElementById("d1");
+  const d2 = document.getElementById("d2");
+  const h0 = document.getElementById("h0");
+  const h1 = document.getElementById("h1");
+  const m0 = document.getElementById("m0");
+  const m1 = document.getElementById("m1");
+
+  const iconLock = document.getElementById("icon-lock");
+  const topText = document.getElementById("top-text");
+  const secSmall = document.getElementById("sec-small");
+  const infoLine = document.getElementById("info-line");
+
+  const cursorEls = [];
+  for(let i=0;i<7;i++) cursorEls.push(document.getElementById("cur"+i));
+
+  const icGear = document.getElementById("ic-gear");
+  const icSmile = document.getElementById("ic-smile");
+  const icInf = document.getElementById("ic-inf");
+  const icKey = document.getElementById("ic-key");
+  const icShield = document.getElementById("ic-shield");
+
+  const btnLid = document.getElementById("btn-lid");
+  const btnSimChild = document.getElementById("btn-sim-child");
+  const btnSimReset = document.getElementById("btn-sim-reset");
+
+  function setSeg3(v){
+    const s = String(v).padStart(3,"0");
+    d0.textContent=s[0]; d1.textContent=s[1]; d2.textContent=s[2];
+  }
+  function setSeg2(v,which){
+    const s = String(v).padStart(2,"0");
+    if(which==="h"){ h0.textContent=s[0]; h1.textContent=s[1]; }
+    else{ m0.textContent=s[0]; m1.textContent=s[1]; }
+  }
+
+  function updateModeIcons(){
+    [icGear,icSmile,icInf,icKey,icShield].forEach(el=>{
+      el.className="top-icon";
+    });
+    if(mode===Mode.FORTRESS) icShield.classList.add("active");
+    if(mode===Mode.PASSWORD) icKey.classList.add("active");
+    if(mode===Mode.INFINITE) icInf.classList.add("active");
+    if(childLock) icSmile.classList.add("active");
+    if(state===State.PW_MASTER_VERIFY || state===State.PW_CHANGE) icGear.classList.add("active");
+
+    icInf.classList.remove("blink");
+    iconLock.classList.remove("blink");
+    if(mode===Mode.INFINITE && state===State.INFINITE_DELAY){
+      icInf.classList.add("blink");
+    }
+    if(state===State.INFINITE_PENDING){
+      iconLock.classList.add("blink");
+    }
+  }
+
+  function updateLidButton(){
+    btnLid.textContent = lidClosed ? "盖子：已合上" : "盖子：已打开";
+  }
+
+  function updateDisplay(){
+    updateModeIcons();
+    updateProgressBar();
+    updateLidButton();
+
+    const disp = document.getElementById("display");
+
+    if(screenOff){
+      disp.classList.add("screen-off");
+      iconLock.textContent="";
+      topText.textContent="";
+      setSeg3("---");
+      setSeg2("--","h");
+      setSeg2("--","m");
+      secSmall.textContent="";
+      infoLine.textContent="";
+      cursorEls.forEach(el=>el.textContent="");
+      return;
+    }else{
+      disp.classList.remove("screen-off");
+    }
+
+    iconLock.textContent = locked ? "🔒" : "🔓";
+    cursorEls.forEach(el=>el.textContent="");
+    secSmall.textContent="";
+
+    const mName = modeName();
+
+    if(state===State.IDLE){
+      topText.textContent = mName+" READY";
+      infoLine.textContent = "SET 设置时间（堡垒/普通），LOCK 开始锁定";
+      setSeg3(setDays);
+      setSeg2(setHours,"h");
+      setSeg2(setMinutes,"m");
+    }
+    else if(state===State.SET_TIME){
+      topText.textContent = mName+" SET TIME";
+      infoLine.textContent = "SET 换位，上/下改时间，BACK 返回";
+      setSeg3(setDays);
+      setSeg2(setHours,"h");
+      setSeg2(setMinutes,"m");
+      if(cursorIdx>=0 && cursorIdx<7) cursorEls[cursorIdx].textContent="_";
+    }
+    else if(state===State.MEM_RECALL){
+      topText.textContent = mName+" 记忆";
+      infoLine.textContent = "上/下选择历史时长，LOCK 确认，BACK 返回";
+      setSeg3(setDays);
+      setSeg2(setHours,"h");
+      setSeg2(setMinutes,"m");
+    }
+    else if(state===State.PRELOCK){
+      topText.textContent = mName+" ARMING";
+      infoLine.textContent = lidClosed ? "5 秒后上锁，BACK 可取消" : "盖子打开，等待重新合上";
+
+      let left = ARM_COUNTDOWN;
+      if(lidClosed && prelockStart!=null){
+        left = Math.max(0,ARM_COUNTDOWN - Math.floor(Date.now()/1000 - prelockStart));
+      }
+      setSeg3("---");
+      setSeg2(left,"h");
+      setSeg2(0,"m");
+    }
+    else if(state===State.LOCKED_TIMED){
+      topText.textContent = mName+" LOCKED";
+      infoLine.textContent = "双击返回 → 紧急解锁 / 长按 SET 延长";
+      let leftSec=0;
+      if(lockEndTime!=null){
+        leftSec=Math.max(0,Math.floor(lockEndTime - Date.now()/1000));
+      }
+      const {d,h,m,s}=secToDHMS(leftSec);
+      setSeg3(d);
+      setSeg2(h,"h");
+      setSeg2(m,"m");
+      secSmall.textContent=":"+String(s).padStart(2,"0");
+    }
+    else if(state===State.LOCKED_PASSWORD){
+      topText.textContent = mName+" LOCKED";
+      infoLine.textContent = "双击返回 → 输入密码解锁";
+      setSeg3("---");
+      setSeg2("--","h");
+      setSeg2("--","m");
+    }
+    else if(state===State.LOCKED_INFINITE){
+      topText.textContent = mName+" LOCKED";
+      infoLine.textContent = "双击返回 → 进入解锁延时";
+      let elapsed=0;
+      if(infiniteStartTime!=null){
+        elapsed=Math.max(0,Math.floor(Date.now()/1000 - infiniteStartTime));
+      }
+      const {d,h,m,s}=secToDHMS(elapsed);
+      setSeg3(d);
+      setSeg2(h,"h");
+      setSeg2(m,"m");
+      secSmall.textContent=":"+String(s).padStart(2,"0");
+    }
+    else if(state===State.PW_INPUT){
+      topText.textContent = mName+" PW INPUT";
+      infoLine.textContent = "SET 换位，上/下改数字，LOCK 确认";
+      const s = pwDigits.join("");
+      setSeg3(s.slice(0,3));
+      setSeg2(s.slice(3,5),"h");
+      setSeg2(s.slice(5,7),"m");
+      if(cursorIdx>=0 && cursorIdx<7) cursorEls[cursorIdx].textContent="_";
+    }
+    else if(state===State.INFINITE_DELAY){
+      topText.textContent = mName+" DELAY";
+      infoLine.textContent="解锁延时中，BACK 取消";
+      let left=0;
+      if(infiniteDelayEnd!=null){
+        left=Math.max(0,Math.floor(infiniteDelayEnd - Date.now()/1000));
+      }
+      const {d,h,m,s}=secToDHMS(left);
+      setSeg3(d);
+      setSeg2(h,"h");
+      setSeg2(m,"m");
+      secSmall.textContent=":"+String(s).padStart(2,"0");
+    }
+    else if(state===State.INFINITE_PENDING){
+      topText.textContent = mName+" 待解锁";
+      infoLine.textContent="5 分钟内打开盖子完成解锁";
+      let left=0;
+      if(infinitePendingEnd!=null){
+        left=Math.max(0,Math.floor(infinitePendingEnd - Date.now()/1000));
+      }
+      const {d,h,m,s}=secToDHMS(left);
+      setSeg3(d);
+      setSeg2(h,"h");
+      setSeg2(m,"m");
+      secSmall.textContent=":"+String(s).padStart(2,"0");
+    }
+    else if(state===State.EXTEND_SET){
+      topText.textContent = mName+" EXTEND";
+      infoLine.textContent = "SET 换位，上/下改时间，LOCK 确认延长";
+      setSeg3(setDays);
+      setSeg2(setHours,"h");
+      setSeg2(setMinutes,"m");
+      if(cursorIdx>=0 && cursorIdx<7) cursorEls[cursorIdx].textContent="_";
+    }
+    else if(state===State.PW_MASTER_VERIFY){
+      topText.textContent = mName+" 主密码";
+      infoLine.textContent = "输入主密码，LOCK 确认，BACK 退出";
+      const s = pwDigits.join("");
+      setSeg3(s.slice(0,3));
+      setSeg2(s.slice(3,5),"h");
+      setSeg2(s.slice(5,7),"m");
+      if(cursorIdx>=0 && cursorIdx<7) cursorEls[cursorIdx].textContent="_";
+    }
+    else if(state===State.PW_CHANGE){
+      topText.textContent = mName+" 改解锁密码";
+      infoLine.textContent = "SET 换位，上/下改数字，LOCK 保存";
+      const s = pwDigits.join("");
+      setSeg3(s.slice(0,3));
+      setSeg2(s.slice(3,5),"h");
+      setSeg2(s.slice(5,7),"m");
+      if(cursorIdx>=0 && cursorIdx<7) cursorEls[cursorIdx].textContent="_";
+    }
+
+    if(childLock){
+      topText.textContent = mName+" 儿童锁";
+    }
+  }
+
+  function onUp(){
+    if(!bumpActivity()) return;
+    if(childLock){ infoLine.textContent="儿童锁已开启"; return; }
+
+    // ★ 改：不再要求 setDays/setHours/setMinutes 都为 0
+    if(state===State.IDLE && !locked &&
+       (mode===Mode.FORTRESS || mode===Mode.NORMAL) &&
+       historyTimes.length>0){
+      state=State.MEM_RECALL;
+      memIndex=0;
+      const {d,h,m}=secToDHMS(historyTimes[memIndex]);
+      setDays=d; setHours=h; setMinutes=m;
+      bumpInput();
+      updateDisplay();
+      return;
+    }
+
+    if(state===State.MEM_RECALL){
+      memIndex = (memIndex - 1 + historyTimes.length) % historyTimes.length;
+      const {d,h,m}=secToDHMS(historyTimes[memIndex]);
+      setDays=d; setHours=h; setMinutes=m;
+      bumpInput();
+      updateDisplay();
+      return;
+    }
+
+    if(state===State.SET_TIME || state===State.EXTEND_SET){
+      applyCursorStep(+1);
+      bumpInput();
+    }else if(
+      state===State.PW_INPUT ||
+      state===State.PW_MASTER_VERIFY ||
+      state===State.PW_CHANGE
+    ){
+      pwDigits[cursorIdx] = (pwDigits[cursorIdx]+1)%10;
+    }
+    updateDisplay();
+  }
+
+  function onDown(){
+    if(!bumpActivity()) return;
+    if(childLock){ infoLine.textContent="儿童锁已开启"; return; }
+
+    // ★ 改：不再要求 setDays/setHours/setMinutes 都为 0
+    if(state===State.IDLE && !locked &&
+       (mode===Mode.FORTRESS || mode===Mode.NORMAL) &&
+       historyTimes.length>0){
+      state=State.MEM_RECALL;
+      memIndex=0;
+      const {d,h,m}=secToDHMS(historyTimes[memIndex]);
+      setDays=d; setHours=h; setMinutes=m;
+      bumpInput();
+      updateDisplay();
+      return;
+    }
+
+    if(state===State.MEM_RECALL){
+      memIndex = (memIndex + 1) % historyTimes.length;
+      const {d,h,m}=secToDHMS(historyTimes[memIndex]);
+      setDays=d; setHours=h; setMinutes=m;
+      bumpInput();
+      updateDisplay();
+      return;
+    }
+
+    if(state===State.SET_TIME || state===State.EXTEND_SET){
+      applyCursorStep(-1);
+      bumpInput();
+    }else if(
+      state===State.PW_INPUT ||
+      state===State.PW_MASTER_VERIFY ||
+      state===State.PW_CHANGE
+    ){
+      pwDigits[cursorIdx] = (pwDigits[cursorIdx]+9)%10;
+    }
+    updateDisplay();
+  }
+
+  function onSetClick(){
+    if(!bumpActivity()) return;
+    if(childLock){ infoLine.textContent="儿童锁已开启"; return; }
+
+    if(state===State.IDLE){
+      if(mode===Mode.FORTRESS || mode===Mode.NORMAL){
+        state=State.SET_TIME;
+        cursorIdx=0;
+        bumpInput();
+      }
+    }else if(
+      state===State.SET_TIME ||
+      state===State.PW_INPUT ||
+      state===State.EXTEND_SET ||
+      state===State.PW_MASTER_VERIFY ||
+      state===State.PW_CHANGE
+    ){
+      cursorIdx=(cursorIdx+1)%7;
+      if(state===State.SET_TIME || state===State.EXTEND_SET) bumpInput();
+    }
+    updateDisplay();
+  }
+
+  function onBackClick(){
+    if(!bumpActivity()) return;
+    if(childLock){ infoLine.textContent="儿童锁已开启"; return; }
+
+    if(state===State.SET_TIME){
+      setDays=0; setHours=0; setMinutes=0;
+      state=State.IDLE;
+      updateDisplay();
+      return;
+    }
+    else if(state===State.MEM_RECALL){
+      // ★ 改：退出记忆功能后时间清零
+      setDays=0; setHours=0; setMinutes=0;
+      state=State.IDLE;
+      updateDisplay();
+      return;
+    }
+    else if(state===State.PRELOCK){
+      prelockStart = null;
+      if(mode===Mode.FORTRESS || mode===Mode.NORMAL){
+        state = State.SET_TIME;
+      }else{
+        state = State.IDLE;
+      }
+      updateDisplay();
+      return;
+    }
+    else if(state===State.PW_INPUT){
+      if(locked){
+        if(mode===Mode.FORTRESS || mode===Mode.NORMAL) state=State.LOCKED_TIMED;
+        else if(mode===Mode.PASSWORD) state=State.LOCKED_PASSWORD;
+        else if(mode===Mode.INFINITE) state=State.LOCKED_INFINITE;
+      }else{
+        state=State.IDLE;
+      }
+      updateDisplay();
+      return;
+    }
+    else if(state===State.INFINITE_DELAY || state===State.INFINITE_PENDING){
+      state=State.LOCKED_INFINITE;
+      infiniteDelayEnd=null;
+      infinitePendingEnd=null;
+      updateDisplay();
+      return;
+    }
+    else if(state===State.EXTEND_SET){
+      state=State.LOCKED_TIMED;
+      updateDisplay();
+      return;
+    }
+    else if(state===State.PW_MASTER_VERIFY || state===State.PW_CHANGE){
+      state=State.IDLE;
+      updateDisplay();
+      return;
+    }
+  }
+
+  function onLockClick(){
+    if(!bumpActivity()) return;
+    if(childLock){ infoLine.textContent="儿童锁已开启"; return; }
+
+    if(!locked && (mode===Mode.PASSWORD || mode===Mode.INFINITE) && state===State.IDLE){
+      const nowMs = performance.now();
+      if(nowMs - lastLockTapTime < DOUBLE_TAP_MS){
+        lastLockTapTime = 0;
+      }else{
+        lastLockTapTime = nowMs;
+        infoLine.textContent = "双击 LOCK 锁定";
+        updateDisplay();
+        return;
+      }
+    }
+
+    if(state===State.MEM_RECALL){
+      if(!lidClosed){
+        infoLine.textContent="盖子未合上，无法上锁";
+        updateDisplay();
+        return;
+      }
+      if(!latchRetracted){
+        infoLine.textContent="锁舌未缩回，无法上锁";
+        updateDisplay();
+        return;
+      }
+      prelockStart = Date.now()/1000;
+      state=State.PRELOCK;
+      updateDisplay();
+      return;
+    }
+
+    if(state===State.PW_MASTER_VERIFY){
+      if(arrEqual(pwDigits, MASTER_PW)){
+        unlockPwd.forEach((v,i)=>pwDigits[i]=v);
+        state=State.PW_CHANGE;
+        cursorIdx=0;
+        infoLine.textContent="请输入新解锁密码";
+      }else{
+        infoLine.textContent="主密码错误";
+        state=State.IDLE;
+      }
+      updateDisplay();
+      return;
+    }
+    if(state===State.PW_CHANGE){
+      unlockPwd = pwDigits.slice();
+      infoLine.textContent="解锁密码已保存";
+      state=State.IDLE;
+      updateDisplay();
+      return;
+    }
+
+    if(locked && state===State.EXTEND_SET){
+      const now = Date.now()/1000;
+      const newSec = dhmToSec(setDays,setHours,setMinutes);
+      if(newSec<=extendBaseSec){
+        infoLine.textContent="需大于剩余时间";
+      }else{
+        lockEndTime = now + newSec;
+        if(lockDurationSec!=null) lockDurationSec += (newSec-extendBaseSec);
+        addHistory(newSec);
+        state=State.LOCKED_TIMED;
+        infoLine.textContent="已延长";
+      }
+      updateDisplay();
+      return;
+    }
+
+    if(!locked){
+      if(mode===Mode.FORTRESS || mode===Mode.NORMAL){
+        if(dhmToSec(setDays,setHours,setMinutes)<=0){
+          infoLine.textContent="请先设定锁定时间";
+          updateDisplay();
+          return;
+        }
+      }
+      if(!lidClosed){
+        infoLine.textContent="盖子未合上，无法上锁";
+        updateDisplay();
+        return;
+      }
+      if(!latchRetracted){
+        infoLine.textContent="锁舌未缩回，无法上锁";
+        updateDisplay();
+        return;
+      }
+
+      prelockStart = Date.now()/1000;
+      state = State.PRELOCK;
+    }else{
+      if(state===State.PW_INPUT){
+        checkPassword();
+        return;
+      }
+    }
+    updateDisplay();
+  }
+
+  function onDoubleBack(){
+    if(!bumpActivity()) return;
+    if(childLock){ infoLine.textContent="儿童锁已开启"; return; }
+    if(!locked) return;
+
+    if(mode===Mode.FORTRESS || mode===Mode.NORMAL || mode===Mode.PASSWORD){
+      state=State.PW_INPUT;
+      pwDigits=[0,0,0,0,0,0,0];
+      cursorIdx=0;
+    }else if(mode===Mode.INFINITE){
+      state=State.INFINITE_DELAY;
+      infiniteDelayEnd = Date.now()/1000 + INFINITE_DELAY_SEC;
+    }
+    updateDisplay();
+  }
+
+  function checkPassword(){
+    const entered = pwDigits;
+
+    if(mode===Mode.FORTRESS){
+      let ok=false;
+      for(let i=0;i<fortressPw.length;i++){
+        if(!fortressUsed[i] && arrEqual(entered, fortressPw[i])){
+          ok=true;
+          fortressUsed[i]=true;
+          break;
+        }
+      }
+      if(ok){
+        locked=false;
+        lockEndTime=null;
+        lockDurationSec=null;
+        latchRetracted=true;
+        state=State.IDLE;
+        infoLine.textContent="紧急解锁成功";
+      }else{
+        infoLine.textContent="密码错误";
+        state=State.LOCKED_TIMED;
+      }
+    }else if(mode===Mode.NORMAL || mode===Mode.PASSWORD){
+      if(arrEqual(entered, unlockPwd) || arrEqual(entered, MASTER_PW)){
+        locked=false;
+        lockEndTime=null;
+        lockDurationSec=null;
+        latchRetracted=true;
+        state=State.IDLE;
+        infoLine.textContent="UNLOCK";
+      }else{
+        infoLine.textContent="密码错误";
+        if(mode===Mode.NORMAL) state=State.LOCKED_TIMED;
+        else state=State.LOCKED_PASSWORD;
+      }
+    }
+    updateDisplay();
+  }
+
+  function handleSetLongPress(){
+    const now = Date.now()/1000;
+
+    if(!locked && state===State.IDLE){
+      const oldMode = mode;
+      mode = (mode+1)%4;
+
+      if(mode===Mode.PASSWORD || mode===Mode.INFINITE){
+        setDays=0; setHours=0; setMinutes=0;
+      }
+      if((oldMode===Mode.FORTRESS && mode===Mode.NORMAL) ||
+         (oldMode===Mode.NORMAL && mode===Mode.FORTRESS)){
+        setDays=0; setHours=0; setMinutes=0;
+      }
+
+      infoLine.textContent = "切换模式："+modeName();
+      updateDisplay();
+      return;
+    }
+    if(locked && state===State.LOCKED_TIMED && (mode===Mode.FORTRESS || mode===Mode.NORMAL) && lockEndTime){
+      const remain = Math.max(0,Math.floor(lockEndTime - now));
+      extendBaseSec = remain;
+      const {d,h,m} = secToDHMS(remain);
+      setDays=d; setHours=h; setMinutes=m;
+      state = State.EXTEND_SET;
+      cursorIdx=0;
+      bumpInput();
+      infoLine.textContent="延长锁定时间";
+      updateDisplay();
+    }
+  }
+
+  function toggleChildLock(){
+    childLock = !childLock;
+    infoLine.textContent = childLock ? "儿童锁已开启" : "儿童锁已关闭";
+    updateDisplay();
+  }
+
+  function doFactoryReset(){
+    mode = Mode.FORTRESS;
+    state = State.IDLE;
+    locked=false;
+    screenOff=false;
+    childLock=false;
+
+    lidClosed=true;
+    latchRetracted=true;
+
+    setDays=setHours=setMinutes=0;
+    cursorIdx=0;
+
+    prelockStart=null;
+    lockEndTime=null;
+    lockDurationSec=null;
+    infiniteStartTime=null;
+    infiniteDelayEnd=null;
+    infinitePendingEnd=null;
+
+    unlockPwd = [0,0,0,0,0,0,0];
+    pwDigits = [0,0,0,0,0,0,0];
+    fortressUsed = [false,false,false,false,false,false];
+
+    progressCount=0;
+    lastCheckinTime=null;
+
+    historyTimes = [];
+    memIndex=0;
+
+    infoLine.textContent="恢复出厂设置";
+    updateDisplay();
+  }
+
+  function onLidToggle(){
+    if(!bumpActivity()) return;
+    lidClosed = !lidClosed;
+
+    if(state===State.PRELOCK){
+      if(!lidClosed){
+        prelockStart=null;
+        infoLine.textContent="盖子打开，倒计时暂停";
+      }else{
+        prelockStart=Date.now()/1000;
+        infoLine.textContent="重新开始5秒倒计时";
+      }
+      updateDisplay();
+      return;
+    }
+
+    if(state===State.INFINITE_PENDING && latchRetracted && !lidClosed){
+      locked=false;
+      infiniteStartTime=null;
+      infiniteDelayEnd=null;
+      infinitePendingEnd=null;
+      state=State.IDLE;
+      infoLine.textContent="无限模式解锁成功";
+    }
+    updateDisplay();
+  }
+
+  function tick(){
+    const now = Date.now()/1000;
+
+    if((state===State.SET_TIME || state===State.EXTEND_SET) &&
+       now - lastInput >= EXIT_TIMEOUT){
+      if(state===State.SET_TIME){
+        setDays=0; setHours=0; setMinutes=0;
+        state = State.IDLE;
+      }else if(state===State.EXTEND_SET){
+        state = State.LOCKED_TIMED;
+      }
+      lastInput = now;
+      updateDisplay();
+    }
+
+    if(
+      state===State.PW_INPUT ||
+      state===State.PW_MASTER_VERIFY ||
+      state===State.PW_CHANGE
+    ){
+      if(now - lastActivity >= PW_IDLE_TIMEOUT){
+        if(state===State.PW_INPUT && locked){
+          if(mode===Mode.FORTRESS || mode===Mode.NORMAL) state=State.LOCKED_TIMED;
+          else if(mode===Mode.PASSWORD) state=State.LOCKED_PASSWORD;
+          else if(mode===Mode.INFINITE) state=State.LOCKED_INFINITE;
+        }else{
+          state=State.IDLE;
+        }
+        lastActivity = now;
+        updateDisplay();
+      }
+    }
+
+    if(!screenOff && now-lastActivity>=INACTIVITY_SEC){
+      screenOff=true;
+      updateDisplay();
+    }
+
+    const sBtn = buttons.set;
+    const bBtn = buttons.back;
+    const lBtn = buttons.lock;
+    const holdSet  = sBtn.isDown ? (now - sBtn.downTime) : 0;
+    const holdBack = bBtn.isDown ? (now - bBtn.downTime) : 0;
+    const holdLock = lBtn.isDown ? (now - lBtn.downTime) : 0;
+
+    if(sBtn.isDown && lBtn.isDown && holdSet>=20 && holdLock>=20 && !comboResetHandled){
+      comboResetHandled=true;
+      doFactoryReset();
+    }
+    if(bBtn.isDown && lBtn.isDown && holdBack>=5 && holdLock>=5 && !comboChildHandled && !comboResetHandled){
+      comboChildHandled=true;
+      toggleChildLock();
+    }
+    if(bBtn.isDown && !lBtn.isDown && !sBtn.isDown &&
+       holdBack>=10 && !back10Handled && !locked && state===State.IDLE){
+      back10Handled=true;
+      bumpActivity();
+      pwDigits=[0,0,0,0,0,0,0];
+      cursorIdx=0;
+      state=State.PW_MASTER_VERIFY;
+      infoLine.textContent="进入密码设置";
+      updateDisplay();
+    }
+
+    if(!bBtn.isDown) back10Handled=false;
+    if(!bBtn.isDown) comboChildHandled=false;
+    if(!sBtn.isDown || !lBtn.isDown) comboResetHandled=false;
+
+    if(state===State.PRELOCK && !screenOff){
+      if(!lidClosed){
+        prelockStart=null;
+      }else if(prelockStart!=null){
+        const elapsed = Math.floor(now-prelockStart);
+        if(elapsed>=ARM_COUNTDOWN){
+          locked=true;
+          latchRetracted=false;
+          if(mode===Mode.FORTRESS || mode===Mode.NORMAL){
+            const total = dhmToSec(setDays,setHours,setMinutes);
+            lockEndTime = now+total;
+            lockDurationSec = total;
+            addHistory(total);
+            state=State.LOCKED_TIMED;
+          }else if(mode===Mode.PASSWORD){
+            lockEndTime=null; lockDurationSec=null;
+            state=State.LOCKED_PASSWORD;
+          }else if(mode===Mode.INFINITE){
+            lockEndTime=null; lockDurationSec=null;
+            infiniteStartTime=now;
+            state=State.LOCKED_INFINITE;
+          }
+          prelockStart=null;
+        }
+      }
+      updateDisplay();
+    }
+
+    if(state===State.LOCKED_TIMED && lockEndTime && !screenOff){
+      if(now>=lockEndTime){
+        if(mode===Mode.FORTRESS){
+          handle21OnAutoUnlock();
+        }
+        locked=false;
+        latchRetracted=true;
+        lockEndTime=null;
+        lockDurationSec=null;
+        state=State.IDLE;
+      }
+      updateDisplay();
+    }
+
+    if(state===State.LOCKED_INFINITE && !screenOff){
+      updateDisplay();
+    }
+
+    if(state===State.INFINITE_DELAY && infiniteDelayEnd && !screenOff){
+      if(now>=infiniteDelayEnd){
+        state=State.INFINITE_PENDING;
+        infinitePendingEnd = now+INFINITE_PENDING_SEC;
+        latchRetracted=true;
+      }
+      updateDisplay();
+    }
+    if(state===State.INFINITE_PENDING && infinitePendingEnd && !screenOff){
+      if(now>=infinitePendingEnd){
+        state=State.LOCKED_INFINITE;
+        infiniteDelayEnd=null;
+        infinitePendingEnd=null;
+        latchRetracted=false;
+      }
+      updateDisplay();
+    }
+
+    requestAnimationFrame(tick);
+  }
+
+  function bindHoldEvents(id,key){
+    const el = document.getElementById(id);
+    const b  = buttons[key];
+
+    function downHandler(e){
+      e.preventDefault();
+      b.isDown = true;
+      b.downTime = Date.now()/1000;
+
+      if(key==="set"){
+        setLongUsed = false;
+        if(setLongTimer) clearTimeout(setLongTimer);
+        setLongTimer = setTimeout(()=>{
+          if(buttons.set.isDown && !buttons.lock.isDown && !buttons.back.isDown){
+            setLongUsed = true;
+            bumpActivity();
+            handleSetLongPress();
+          }
+        },3000);
+      }
+    }
+
+    function upHandler(e){
+      e.preventDefault();
+      if(!b.isDown) return;
+      b.isDown = false;
+
+      if(key==="set"){
+        if(setLongTimer){ clearTimeout(setLongTimer); setLongTimer=null; }
+        if(!setLongUsed){
+          onSetClick();
+        }
+      }else if(key==="back"){
+        if(!(comboChildHandled || comboResetHandled)){
+          onBackClick();
+        }
+      }else if(key==="lock"){
+        if(!(comboChildHandled || comboResetHandled)){
+          onLockClick();
+        }
+      }
+    }
+
+    function leaveHandler(e){
+      e.preventDefault();
+      if(!b.isDown) return;
+      b.isDown = false;
+      if(key==="set" && setLongTimer){
+        clearTimeout(setLongTimer);
+        setLongTimer = null;
+      }
+    }
+
+    el.addEventListener('mousedown', downHandler);
+    el.addEventListener('touchstart', downHandler, {passive:false});
+    el.addEventListener('mouseup',   upHandler);
+    el.addEventListener('touchend',  upHandler, {passive:false});
+    el.addEventListener('mouseleave',leaveHandler);
+  }
+
+  bindHoldEvents("btn-set","set");
+  bindHoldEvents("btn-back","back");
+  bindHoldEvents("btn-lock","lock");
+
+  document.getElementById("btn-up").onclick = onUp;
+  document.getElementById("btn-down").onclick = onDown;
+  document.getElementById("btn-back").ondblclick = onDoubleBack;
+
+  btnLid.onclick = onLidToggle;
+  btnSimChild.onclick = () => { bumpActivity(); toggleChildLock(); };
+  btnSimReset.onclick = () => { bumpActivity(); doFactoryReset(); };
+
+  updateDisplay();
+  requestAnimationFrame(tick);
+</script>
+</body>
+</html>
