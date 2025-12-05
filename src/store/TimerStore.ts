@@ -12,7 +12,8 @@ export enum State {
 
 const ARM_COUNTDOWN = 5;
 const EXIT_TIMEOUT = 10;
-const INACTIVITY_SEC = 20;
+const SET_TIME_EXIT_TIMEOUT = 60;
+const INACTIVITY_SEC = 10;  // 修改为 10秒无操作自动息屏
 const MAX_DAYS = 400;
 const INFINITE_DELAY_SEC = 3*60;
 const INFINITE_PENDING_SEC = 5*60;
@@ -75,6 +76,7 @@ export class TimerStore {
 
   isFlashingReward = false;
   warnLockIcon = false;
+  childLockBlink = false;
 
   unlockPwd = [0,0,0,0,0,0,0];
   fortressPw = [
@@ -102,6 +104,8 @@ export class TimerStore {
   
   setLongTimer: any = null;
   setLongUsed = false;
+
+  childLockBlinkTimer: any = null;
 
   tempMessage = "";
   tempMessageTimer: any = null;
@@ -139,43 +143,34 @@ export class TimerStore {
 
   setSecondsClamped(total: number){
     if(total<0) total=0;
-    const maxTotal = MAX_DAYS*86400 + 23*3600 + 59*60;
+    // Clamp to the maximum representable time (400 days, 23:59:59).
+    const maxTotal = (MAX_DAYS + 1) * 86400 - 1;
     if(total>maxTotal) total=maxTotal;
     let {d,h,m} = secToDHMS(total);
     this.setDays=d; this.setHours=h; this.setMinutes=m;
   }
 
   applyCursorStep(dir: number){
+    // Convert edits into seconds so overflow/borrow will naturally carry to the left.
+    let deltaSec = 0;
     if(this.cursorIdx >= 5){ // Minutes
-      let step = (this.cursorIdx === 5) ? 10 : 1;
-      let newM = this.setMinutes + dir * step;
-      // Wrap 0-99
-      if(newM > 99) newM = newM % 100;
-      if(newM < 0) newM = (newM % 100 + 100) % 100;
-      this.setMinutes = newM;
+      const step = (this.cursorIdx === 5) ? 10 : 1;
+      deltaSec = dir * step * 60;
     }
     else if(this.cursorIdx >= 3){ // Hours
-      let step = (this.cursorIdx === 3) ? 10 : 1;
-      let newH = this.setHours + dir * step;
-      // Wrap 0-99
-      if(newH > 99) newH = newH % 100;
-      if(newH < 0) newH = (newH % 100 + 100) % 100;
-      this.setHours = newH;
+      const step = (this.cursorIdx === 3) ? 10 : 1;
+      deltaSec = dir * step * 3600;
     }
     else { // Days
       let step = 0;
       if(this.cursorIdx === 0) step = 100;
       if(this.cursorIdx === 1) step = 10;
       if(this.cursorIdx === 2) step = 1;
-      
-      let newD = this.setDays + dir * step;
-      // Limit 400. Range 0-400.
-      const MAX_D = 400;
-      if(newD > MAX_D) newD = newD % (MAX_D + 1);
-      if(newD < 0) newD = (newD % (MAX_D + 1) + (MAX_D + 1)) % (MAX_D + 1);
-      
-      this.setDays = newD;
+      deltaSec = dir * step * 86400;
     }
+
+    const totalSec = dhmToSec(this.setDays, this.setHours, this.setMinutes) + deltaSec;
+    this.setSecondsClamped(totalSec);
   }
 
   addHistory(sec: number){
@@ -455,7 +450,7 @@ export class TimerStore {
         this.lockEndTime = now + newSec;
         if(this.lockDurationSec!=null) this.lockDurationSec += (newSec-this.extendBaseSec);
         this.addHistory(newSec);
-        this.state=State.LOCKED_TIMED;
+        this.state=State.LOCKED_TIMED
         this.setTempMessage("已延长");
       }
       return;
@@ -585,6 +580,14 @@ export class TimerStore {
     this.setTempMessage(this.childLock ? "儿童锁已开启" : "儿童锁已关闭");
   }
 
+  triggerChildLockBlink(){
+    this.childLockBlink = true;
+    if(this.childLockBlinkTimer) clearTimeout(this.childLockBlinkTimer);
+    this.childLockBlinkTimer = setTimeout(()=>{
+      runInAction(()=>{ this.childLockBlink = false; });
+    }, 800);
+  }
+
   doFactoryReset(){
     this.mode = Mode.FORTRESS;
     this.state = State.IDLE;
@@ -651,7 +654,12 @@ export class TimerStore {
         b.isDown = true;
         // Sound.playTone(800, 0.05); // Removed button sound
         b.downTime = Date.now()/1000;
-        
+        // When child lock is on, only allow the combo to unlock child mode; block other long-press timers.
+        if(this.childLock){
+          this.triggerChildLockBlink();
+          return;
+        }
+
         if(btn==='set'){
           this.setLongUsed = false;
           if(this.setLongTimer) clearTimeout(this.setLongTimer);
@@ -667,13 +675,19 @@ export class TimerStore {
     }else{
       if(b.isDown){
         b.isDown = false;
+        // When child lock is on, ignore single-button actions; only the combo is allowed to unlock it.
+        if(this.childLock){
+          this.triggerChildLockBlink();
+          return;
+        }
         if(btn==='set'){
           if(this.setLongTimer){ clearTimeout(this.setLongTimer); this.setLongTimer=null; }
           if(!this.setLongUsed){
             this.onSetClick();
           }
         }else if(btn==='back'){
-          if(!(this.comboChildHandled || this.comboResetHandled)){
+          // If the 10s long-press already triggered password change entry, skip the normal back click on release.
+          if(!(this.comboChildHandled || this.comboResetHandled || this.back10Handled)){
             this.onBackClick();
           }
         }else if(btn==='lock'){
@@ -688,14 +702,13 @@ export class TimerStore {
   tick(){
     const now = Date.now()/1000;
 
-    if((this.state===State.SET_TIME || this.state===State.EXTEND_SET) &&
-       now - this.lastInput >= EXIT_TIMEOUT){
-      if(this.state===State.SET_TIME){
-        this.setDays=0; this.setHours=0; this.setMinutes=0;
-        this.state = State.IDLE;
-      }else if(this.state===State.EXTEND_SET){
-        this.state = State.LOCKED_TIMED;
-      }
+    if(this.state===State.SET_TIME && now - this.lastInput >= SET_TIME_EXIT_TIMEOUT){
+      this.setDays=0; this.setHours=0; this.setMinutes=0;
+      this.state = State.IDLE;
+      this.lastInput = now;
+    }
+    if(this.state===State.EXTEND_SET && now - this.lastInput >= EXIT_TIMEOUT){
+      this.state = State.LOCKED_TIMED;
       this.lastInput = now;
     }
 
@@ -716,6 +729,10 @@ export class TimerStore {
       }
     }
 
+    // Keep screen awake while any key is held (avoid sleeping during long-press flows like 10s BACK).
+    const anyBtnHeld = this.buttons.set.isDown || this.buttons.back.isDown || this.buttons.lock.isDown;
+    if(anyBtnHeld) this.lastActivity = now;
+
     if(!this.screenOff && now-this.lastActivity>=INACTIVITY_SEC){
       this.screenOff=true;
     }
@@ -727,27 +744,38 @@ export class TimerStore {
     const holdBack = bBtn.isDown ? (now - bBtn.downTime) : 0;
     const holdLock = lBtn.isDown ? (now - lBtn.downTime) : 0;
 
-    if(sBtn.isDown && lBtn.isDown && holdSet>=20 && holdLock>=20 && !this.comboResetHandled){
-      this.comboResetHandled=true;
-      this.doFactoryReset();
-    }
-    if(bBtn.isDown && lBtn.isDown && holdBack>=5 && holdLock>=5 && !this.comboChildHandled && !this.comboResetHandled){
-      this.comboChildHandled=true;
-      this.toggleChildLock();
-    }
-    if(bBtn.isDown && !lBtn.isDown && !sBtn.isDown &&
-       holdBack>=10 && !this.back10Handled && !this.locked && this.state===State.IDLE){
-      this.back10Handled=true;
-      this.bumpActivity();
-      this.pwDigits=[0,0,0,0,0,0,0];
-      this.cursorIdx=0;
-      this.state=State.PW_MASTER_VERIFY;
-      this.setTempMessage("进入密码设置");
-    }
+    // If child lock is enabled, only allow the BACK+LOCK 5s combo to toggle it; block other combos/long-press actions.
+    if(this.childLock){
+      if(bBtn.isDown && lBtn.isDown && holdBack>=5 && holdLock>=5 && !this.comboChildHandled && !this.comboResetHandled){
+        this.comboChildHandled=true;
+        this.toggleChildLock();
+      }
+      if(!bBtn.isDown) this.back10Handled=false;
+      if(!bBtn.isDown) this.comboChildHandled=false;
+      if(!sBtn.isDown || !lBtn.isDown) this.comboResetHandled=false;
+    }else{
+      if(sBtn.isDown && lBtn.isDown && holdSet>=20 && holdLock>=20 && !this.comboResetHandled){
+        this.comboResetHandled=true;
+        this.doFactoryReset();
+      }
+      if(bBtn.isDown && lBtn.isDown && holdBack>=5 && holdLock>=5 && !this.comboChildHandled && !this.comboResetHandled){
+        this.comboChildHandled=true;
+        this.toggleChildLock();
+      }
+      if(bBtn.isDown && !lBtn.isDown && !sBtn.isDown &&
+         holdBack>=10 && !this.back10Handled && !this.locked && this.state===State.IDLE){
+        this.back10Handled=true;
+        this.bumpActivity();
+        this.pwDigits=[0,0,0,0,0,0,0];
+        this.cursorIdx=0;
+        this.state=State.PW_MASTER_VERIFY;
+        this.setTempMessage("进入密码设置");
+      }
 
-    if(!bBtn.isDown) this.back10Handled=false;
-    if(!bBtn.isDown) this.comboChildHandled=false;
-    if(!sBtn.isDown || !lBtn.isDown) this.comboResetHandled=false;
+      if(!bBtn.isDown) this.back10Handled=false;
+      if(!bBtn.isDown) this.comboChildHandled=false;
+      if(!sBtn.isDown || !lBtn.isDown) this.comboResetHandled=false;
+    }
 
     if(this.state===State.PRELOCK && !this.screenOff){
       if(!this.lidClosed){
