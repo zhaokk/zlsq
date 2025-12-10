@@ -621,7 +621,13 @@ export class TimerStore {
   }
 
   onLidToggle(){
-    if(!this.bumpActivity()) return;
+    // Allow lid interaction even在熄屏时；仍调用以刷新活动时间/点亮屏。
+    this.bumpActivity();
+    // When locked (including倒计时解锁阶段), block lid toggling except the special infinite pending window.
+    if(this.locked && this.state!==State.INFINITE_PENDING){
+      this.setTempMessage("已锁定，无法开盖");
+      return;
+    }
     this.lidClosed = !this.lidClosed;
 
     if(this.state===State.PRELOCK){
@@ -819,14 +825,14 @@ export class TimerStore {
       }
     }
 
-    if(this.state===State.INFINITE_DELAY && this.infiniteDelayEnd && !this.screenOff){
+    if(this.state===State.INFINITE_DELAY && this.infiniteDelayEnd){
       if(now>=this.infiniteDelayEnd){
         this.state=State.INFINITE_PENDING;
         this.infinitePendingEnd = now+INFINITE_PENDING_SEC;
         this.latchRetracted=true;
       }
     }
-    if(this.state===State.INFINITE_PENDING && this.infinitePendingEnd && !this.screenOff){
+    if(this.state===State.INFINITE_PENDING && this.infinitePendingEnd){
       if(now>=this.infinitePendingEnd){
         this.state=State.LOCKED_INFINITE;
         this.infiniteDelayEnd=null;
