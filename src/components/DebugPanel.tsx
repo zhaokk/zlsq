@@ -7,7 +7,7 @@ export const DebugPanel = observer(() => {
 
   let remainingTime = "无";
   if (lockEndTime) {
-    const now = Date.now() / 1000;
+    const now = timerStore.nowSec();
     const diff = Math.max(0, Math.floor(lockEndTime - now));
     const d = Math.floor(diff / 86400);
     const h = Math.floor((diff % 86400) / 3600);
@@ -34,6 +34,7 @@ export const DebugPanel = observer(() => {
             {lidClosed ? "打开盖子" : "合上盖子"}
           </button>
           <button onClick={() => timerStore.debugReduceTime(5)}>设置锁定剩余5秒</button>
+          <button onClick={() => timerStore.debugFastForward(3600)}>快进1小时解锁</button>
           <button onClick={() => timerStore.debugUnlock()}>强制解锁</button>
           <button onClick={() => timerStore.doFactoryReset()}>恢复出厂设置</button>
           <button onClick={() => timerStore.toggleChildLock()}>切换儿童锁</button>

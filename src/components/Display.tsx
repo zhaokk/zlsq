@@ -30,13 +30,21 @@ export const Display = observer(() => {
     return () => clearInterval(timer);
   }, []);
 
-  const hideOuterPhone = phoneInside && lidClosed;
+  // Hide the outer/loose phone whenever it's already placed inside to avoid duplicate visuals.
+  const hideOuterPhone = phoneInside;
+
+  const removePhone = () => {
+    if (locked) {
+      store.setTempMessage("已锁定，无法取出手机");
+      return false;
+    }
+    setPhoneInside(false);
+    return true;
+  };
 
   const handlePhoneClick = () => {
     if (phoneInside) {
-      if (!locked && !lidClosed) {
-        setPhoneInside(false);
-      }
+      removePhone();
       return;
     }
     if (lidClosed) {
@@ -44,6 +52,10 @@ export const Display = observer(() => {
       return;
     }
     setPhoneInside(true);
+  };
+
+  const handleInnerPhoneClick = () => {
+    removePhone();
   };
 
   const handleLidClick = () => {
@@ -95,8 +107,9 @@ export const Display = observer(() => {
     infoLine = lidClosed ? "5 秒后上锁，BACK 可取消" : "盖子打开，等待重新合上";
 
     let left = 5;
+    const now = store.nowSec();
     if (lidClosed && prelockStart != null) {
-      left = Math.max(0, 5 - Math.floor(Date.now() / 1000 - prelockStart));
+      left = Math.max(0, 5 - Math.floor(now - prelockStart));
     }
     dStr = "---";
     hStr = "--";
@@ -109,8 +122,9 @@ export const Display = observer(() => {
     infoLine = "双击返回 → 紧急解锁 / 长按 SET 延长";
 
     let leftSec = 0;
+    const now = store.nowSec();
     if (lockEndTime != null) {
-      leftSec = Math.max(0, Math.floor(lockEndTime - Date.now() / 1000));
+      leftSec = Math.max(0, Math.floor(lockEndTime - now));
     }
     const { d, h, m, s } = secToDHMS(leftSec);
 
@@ -131,8 +145,9 @@ export const Display = observer(() => {
     topText = modeName + " LOCKED";
     infoLine = "双击返回 → 进入解锁延时";
     let elapsed = 0;
+    const now = store.nowSec();
     if (infiniteStartTime != null) {
-      elapsed = Math.max(0, Math.floor(Date.now() / 1000 - infiniteStartTime));
+      elapsed = Math.max(0, Math.floor(now - infiniteStartTime));
     }
     const { d, h, m, s } = secToDHMS(elapsed);
     dStr = String(d).padStart(3, "0");
@@ -154,8 +169,9 @@ export const Display = observer(() => {
     topText = modeName + " DELAY";
     infoLine = "解锁延时中，BACK 取消";
     let left = 0;
+    const now = store.nowSec();
     if (infiniteDelayEnd != null) {
-      left = Math.max(0, Math.floor(infiniteDelayEnd - Date.now() / 1000));
+      left = Math.max(0, Math.floor(infiniteDelayEnd - now));
     }
     const { d, h, m, s } = secToDHMS(left);
     dStr = String(d).padStart(3, "0");
@@ -167,8 +183,9 @@ export const Display = observer(() => {
     topText = modeName + " 待解锁";
     infoLine = "5 分钟内打开盖子完成解锁";
     let left = 0;
+    const now = store.nowSec();
     if (infinitePendingEnd != null) {
-      left = Math.max(0, Math.floor(infinitePendingEnd - Date.now() / 1000));
+      left = Math.max(0, Math.floor(infinitePendingEnd - now));
     }
     const { d, h, m, s } = secToDHMS(left);
     dStr = String(d).padStart(3, "0");
@@ -344,27 +361,21 @@ export const Display = observer(() => {
             aria-label={lidClosed ? "open lid" : "close lid"}
           >
             <div className="lid-screen">
-              <div className="mini-display">
-                <div className="mini-top">{topText}</div>
-                <div className="mini-digits">
-                  <span className="mini-digit">{dStr}</span>
-                  <span className="mini-colon">:</span>
-                  <span className="mini-digit">{hStr}</span>
-                  <span className="mini-colon">:</span>
-                  <span className="mini-digit">{mStr}</span>
-                  <span className="mini-seconds">:{sStr}</span>
-                </div>
-                <div className="mini-info">{infoLine}</div>
-              </div>
+              <div className="mini-display mini-display-off" aria-hidden="true"></div>
             </div>
           </button>
           <div className="box-body">
-            <div className="box-inner">
-              <div className="box-floor"></div>
-              <div className={clsx("box-phone-inside", { visible: phoneInside, hidden: !phoneInside })}></div>
+              <div className="box-inner">
+                <div className="box-floor"></div>
+              <div
+                className={clsx("box-phone-inside", { visible: phoneInside, hidden: !phoneInside })}
+                onClick={handleInnerPhoneClick}
+                role="button"
+                aria-label="phone-inside-toggle"
+              ></div>
+              </div>
             </div>
           </div>
-        </div>
 
         <div
           className={clsx("scene-phone", phoneInside ? "inside" : "outside", { locked, hidden: hideOuterPhone })}
