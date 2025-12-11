@@ -19,7 +19,8 @@ const INFINITE_DELAY_SEC = 3*60;
 const INFINITE_PENDING_SEC = 5*60;
 const MIN_LOCK_FOR_CHECKIN = 30*60;
 const MIN_INTERVAL_BETWEEN_CHECKIN = 18*3600;
-const MAX_INTERVAL_TO_KEEP_PLAN = 72*3600;
+const PROGRESS_RESET_SEC = 72*3600;
+const ONE_DAY_SEC = 24*3600;
 const PW_IDLE_TIMEOUT = 10;
 const MASTER_PW = [6,6,6,6,6,6,6];
 const DOUBLE_TAP_MS = 350;
@@ -40,6 +41,9 @@ function arrEqual(a: number[], b: number[]){
 }
 
 export class TimerStore {
+  // Simulated clock (seconds) decoupled from real time; advanced in tick or via fast-forward.
+  simTimeSec = Math.floor(Date.now()/1000);
+  lastRealTickMs = Date.now();
   mode = Mode.FORTRESS;
   state = State.IDLE;
   locked = false;
@@ -49,6 +53,7 @@ export class TimerStore {
   lidClosed = true;
   latchRetracted = true;
 
+  lockStartTime: number | null = null;
   setDays = 0;
   setHours = 0;
   setMinutes = 0;
@@ -65,8 +70,8 @@ export class TimerStore {
   extendBaseSec = 0;
 
   pwDigits = [0,0,0,0,0,0,0];
-  lastActivity = Date.now()/1000;
-  lastInput = Date.now()/1000;
+  lastActivity = 0;
+  lastInput = 0;
 
   progressCount = 0;
   lastCheckinTime: number | null = null;
@@ -114,7 +119,15 @@ export class TimerStore {
 
   constructor() {
     makeAutoObservable(this);
+    this.simTimeSec = Math.floor(Date.now()/1000);
+    this.lastRealTickMs = Date.now();
+    this.lastActivity = this.simTimeSec;
+    this.lastInput = this.simTimeSec;
     this.updateInfoText();
+  }
+
+  nowSec(){
+    return this.simTimeSec;
   }
 
   setTempMessage(msg: string, duration: number = 3000){
@@ -128,10 +141,10 @@ export class TimerStore {
   }
 
   // Actions
-  bumpInput() { this.lastInput = Date.now()/1000; }
+  bumpInput() { this.lastInput = this.nowSec(); }
   
   bumpActivity() {
-    const now = Date.now()/1000;
+    const now = this.nowSec();
     if(this.screenOff){
       this.screenOff=false;
       this.lastActivity = now;
@@ -181,22 +194,46 @@ export class TimerStore {
     if(this.historyTimes.length>5) this.historyTimes.pop();
   }
 
-  handle21OnAutoUnlock(){
+  handle21OnAutoUnlock(now: number, isEmergency: boolean){
     if(this.mode!==Mode.FORTRESS) return;
-    if(this.lockDurationSec==null || this.lockDurationSec<MIN_LOCK_FOR_CHECKIN) return;
 
-    const now = Date.now()/1000;
-    if(this.lastCheckinTime!=null){
-      const gap = now-this.lastCheckinTime;
-      if(gap<MIN_INTERVAL_BETWEEN_CHECKIN) return;
-      if(gap>MAX_INTERVAL_TO_KEEP_PLAN && this.progressCount>0){
-        this.progressCount=0;
-      }
+    const start = this.lockStartTime;
+    const durationSec = start!=null ? Math.max(0, Math.floor(now - start)) : (this.lockDurationSec ?? 0);
+    this.lockStartTime = null;
+
+    // Step 1: emergency unlock -> fail, no progress.
+    if(isEmergency) return;
+
+    // Step 2: 18h cooldown from last successful check-in (based on start time).
+    if(this.lastCheckinTime!=null && start!=null && (start - this.lastCheckinTime) < MIN_INTERVAL_BETWEEN_CHECKIN){
+      return;
     }
-    if(this.progressCount===21) this.progressCount=0;
-    this.progressCount = Math.min(21,this.progressCount+1);
+
+    // Step 3: scoring by duration.
+    if(durationSec < MIN_LOCK_FOR_CHECKIN) return;
+
+    let earned = 0;
+    if(durationSec < ONE_DAY_SEC){
+      earned = 1;
+    }else{
+      earned = 1 + Math.floor(durationSec / ONE_DAY_SEC);
+    }
+
+    if(this.progressCount>=21){
+      this.progressCount = 0;
+    }
+
+    const next = this.progressCount + earned;
+    if(next >= 21){
+      this.triggerRewardFlash();
+      this.playRewardMelody();
+      this.progressCount = 0;
+    }else{
+      this.progressCount = next;
+    }
+
+    // Step 4: reset cooldown anchor to this unlock time.
     this.lastCheckinTime = now;
-    if(this.progressCount===21) this.triggerRewardFlash();
   }
 
   triggerRewardFlash() {
@@ -217,6 +254,16 @@ export class TimerStore {
 
   stopRewardFlash() {
       this.isFlashingReward = false;
+  }
+
+  playRewardMelody() {
+    const seq = [
+      [784, 0.18], [880, 0.18], [988, 0.18], [1047, 0.18],
+      [1175, 0.2], [1319, 0.2], [1175, 0.2], [988, 0.2]
+    ];
+    seq.forEach(([freq, dur], idx) => {
+      setTimeout(() => Sound.playTone(freq, dur), idx * 200);
+    });
   }
 
   get modeName(){
@@ -416,7 +463,7 @@ export class TimerStore {
         Sound.warn();
         return;
       }
-      this.prelockStart = Date.now()/1000;
+      this.prelockStart = this.nowSec();
       this.state=State.PRELOCK;
       Sound.beep();
       return;
@@ -442,7 +489,7 @@ export class TimerStore {
     }
 
     if(this.locked && this.state===State.EXTEND_SET){
-      const now = Date.now()/1000;
+      const now = this.nowSec();
       const newSec = dhmToSec(this.setDays,this.setHours,this.setMinutes);
       if(newSec<=this.extendBaseSec){
         this.setTempMessage("需大于剩余时间");
@@ -476,7 +523,7 @@ export class TimerStore {
         return;
       }
 
-      this.prelockStart = Date.now()/1000;
+      this.prelockStart = this.nowSec();
       this.state = State.PRELOCK;
       Sound.beep();
     }else{
@@ -498,7 +545,7 @@ export class TimerStore {
       this.cursorIdx=0;
     }else if(this.mode===Mode.INFINITE){
       this.state=State.INFINITE_DELAY;
-      this.infiniteDelayEnd = Date.now()/1000 + INFINITE_DELAY_SEC;
+        this.infiniteDelayEnd = this.nowSec() + INFINITE_DELAY_SEC;
     }
   }
 
@@ -515,11 +562,14 @@ export class TimerStore {
         }
       }
       if(ok){
+        const now = this.nowSec();
         this.locked=false;
         this.lockEndTime=null;
         this.lockDurationSec=null;
+        this.lockStartTime=null;
         this.latchRetracted=true;
         this.state=State.IDLE;
+        this.handle21OnAutoUnlock(now, true);
         this.setTempMessage("紧急解锁成功");
         Sound.playTone(1200, 0.1); setTimeout(()=>Sound.playTone(1500, 0.1), 150); setTimeout(()=>Sound.playTone(1800, 0.2), 300);
       }else{
@@ -532,6 +582,7 @@ export class TimerStore {
         this.locked=false;
         this.lockEndTime=null;
         this.lockDurationSec=null;
+        this.lockStartTime=null;
         this.latchRetracted=true;
         this.state=State.IDLE;
         this.setTempMessage("UNLOCK");
@@ -546,7 +597,7 @@ export class TimerStore {
   }
 
   handleSetLongPress(){
-    const now = Date.now()/1000;
+    const now = this.nowSec();
 
     if(!this.locked && this.state===State.IDLE){
       const oldMode = this.mode;
@@ -598,6 +649,7 @@ export class TimerStore {
     this.lidClosed=true;
     this.latchRetracted=true;
 
+    this.lockStartTime=null;
     this.setDays=0; this.setHours=0; this.setMinutes=0;
     this.cursorIdx=0;
 
@@ -635,7 +687,7 @@ export class TimerStore {
         this.prelockStart=null;
         this.setTempMessage("盖子打开，倒计时暂停");
       }else{
-        this.prelockStart=Date.now()/1000;
+        this.prelockStart=this.nowSec();
         this.setTempMessage("重新开始5秒倒计时");
       }
       return;
@@ -659,7 +711,7 @@ export class TimerStore {
       if(!b.isDown){
         b.isDown = true;
         // Sound.playTone(800, 0.05); // Removed button sound
-        b.downTime = Date.now()/1000;
+        b.downTime = this.nowSec();
         // When child lock is on, only allow the combo to unlock child mode; block other long-press timers.
         if(this.childLock){
           this.triggerChildLockBlink();
@@ -706,7 +758,17 @@ export class TimerStore {
   }
 
   tick(){
-    const now = Date.now()/1000;
+    const realNowMs = Date.now();
+    const deltaSec = Math.max(0, (realNowMs - this.lastRealTickMs)/1000);
+    this.simTimeSec += deltaSec;
+    this.lastRealTickMs = realNowMs;
+    const now = this.nowSec();
+
+    if(!this.locked && this.progressCount>0 && this.lastCheckinTime!=null){
+      if(now - this.lastCheckinTime >= PROGRESS_RESET_SEC){
+        this.progressCount = 0;
+      }
+    }
 
     if(this.state===State.SET_TIME && now - this.lastInput >= SET_TIME_EXIT_TIMEOUT){
       this.setDays=0; this.setHours=0; this.setMinutes=0;
@@ -783,7 +845,7 @@ export class TimerStore {
       if(!sBtn.isDown || !lBtn.isDown) this.comboResetHandled=false;
     }
 
-    if(this.state===State.PRELOCK && !this.screenOff){
+    if(this.state===State.PRELOCK){
       if(!this.lidClosed){
         this.prelockStart=null;
       }else if(this.prelockStart!=null){
@@ -791,6 +853,7 @@ export class TimerStore {
         if(elapsed>=ARM_COUNTDOWN){
           this.locked=true;
           this.latchRetracted=false;
+          this.lockStartTime = now;
           if(this.mode===Mode.FORTRESS || this.mode===Mode.NORMAL){
             const total = dhmToSec(this.setDays,this.setHours,this.setMinutes);
             this.lockEndTime = now+total;
@@ -811,15 +874,16 @@ export class TimerStore {
       }
     }
 
-    if(this.state===State.LOCKED_TIMED && this.lockEndTime && !this.screenOff){
+    if(this.state===State.LOCKED_TIMED && this.lockEndTime){
       if(now>=this.lockEndTime){
         if(this.mode===Mode.FORTRESS){
-          this.handle21OnAutoUnlock();
+          this.handle21OnAutoUnlock(now, false);
         }
         this.locked=false;
         this.latchRetracted=true;
         this.lockEndTime=null;
         this.lockDurationSec=null;
+        this.lockStartTime=null;
         this.state=State.IDLE;
         Sound.playTone(1200, 0.1); setTimeout(()=>Sound.playTone(1500, 0.1), 150); setTimeout(()=>Sound.playTone(1800, 0.2), 300);
       }
@@ -845,13 +909,20 @@ export class TimerStore {
   // Debug Actions
   debugReduceTime(seconds: number){
     if(this.lockEndTime){
-      this.lockEndTime = Math.min(this.lockEndTime, Date.now()/1000 + seconds);
+      this.lockEndTime = Math.min(this.lockEndTime, this.nowSec() + seconds);
     }
+  }
+
+  debugFastForward(seconds: number){
+    // Advance simulated clock forward; timers and progress will process on the next tick.
+    this.simTimeSec += seconds;
+    this.tick();
   }
   debugUnlock(){
     this.locked=false;
     this.state=State.IDLE;
     this.latchRetracted=true;
+    this.lockStartTime=null;
   }
 }
 
